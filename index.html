@@ -916,9 +916,12 @@ function tryInitSocket() {
 
     socket.on('connect', () => {
       socketConnected = true;
-      toast('🔌 Connected to local realtime server');
+      toast('🔗 Connected to shared room (realtime sync)');
       socket.emit('join', { room: roomId, cid: clientCid });
       socket.emit('presence', { room: roomId, cid: clientCid });
+      // Hide setup banner and show presence when Socket.IO is connected
+      document.getElementById('setup-banner').style.display = 'none';
+      document.getElementById('presence-wrap').style.display = 'flex';
     });
 
     socket.on('init', data => {
@@ -939,7 +942,7 @@ function tryInitSocket() {
       const store = type === 'qc' ? qcData : leaveData;
       if (!store[date]) store[date] = {};
       store[date][id] = ev;
-      if ((mode === 'quarterly' && type === 'qc') || (mode === 'leave' && type === 'lv')) render();
+      render();
     });
 
     socket.on('eventRemoved', payload => {
@@ -957,7 +960,7 @@ function tryInitSocket() {
       document.getElementById('presence-dot').classList.toggle('offline', n === 0);
     });
 
-    socket.on('disconnect', () => { socketConnected = false; toast('🔌 Local server disconnected'); });
+    socket.on('disconnect', () => { socketConnected = false; document.getElementById('presence-dot').classList.add('offline'); toast('⚠️ Disconnected — reconnecting…'); });
   } catch (e) {
     console.warn('Socket init failed', e);
   }
@@ -1003,7 +1006,13 @@ function init() {
   if (fbEnabled) {
     tryInitFirebase();
   } else {
-    document.getElementById('setup-banner').style.display = '';
+    // Don't show setup banner immediately — Socket.IO might connect.
+    // Show after a short delay only if Socket.IO also failed.
+    setTimeout(() => {
+      if (!socketConnected && !fbEnabled) {
+        document.getElementById('setup-banner').style.display = '';
+      }
+    }, 2000);
   }
 
   const now = new Date();
@@ -1460,10 +1469,10 @@ function openShareModal() {
   document.getElementById('sh-url').textContent = url;
   document.getElementById('copy-btn').textContent = 'Copy';
   document.getElementById('copy-btn').classList.remove('copied');
-  document.getElementById('sh-sync-info').innerHTML = fbEnabled
-    ? '✅ Firebase is connected. Anyone who opens this link will see and edit the same calendar in real time.'
-    : '💾 Running in local mode. Configure Firebase to enable cross-device collaboration.';
-  document.getElementById('sh-fb-warn').style.display = fbEnabled ? 'none' : '';
+  document.getElementById('sh-sync-info').innerHTML = (fbEnabled || socketConnected)
+    ? '✅ Realtime sync is active. Anyone who opens this link will see and edit the same calendar in real time.'
+    : '💾 Running in local mode. Data stays in this browser only and won\'t sync with others.';
+  document.getElementById('sh-fb-warn').style.display = (fbEnabled || socketConnected) ? 'none' : '';
   document.getElementById('ov-sh').classList.add('open');
 }
 function copyUrl() {
