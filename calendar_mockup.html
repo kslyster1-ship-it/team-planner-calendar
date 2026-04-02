@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Calendar Planner</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #f0f2f5;
+      min-height: 100vh;
+      color: #1a1a2e;
+    }
+
+    /* ── TOP BAR ── */
+    .topbar {
+      background: #fff;
+      border-bottom: 1px solid #e5e7eb;
+      padding: 14px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    .topbar-title {
+      font-size: 18px; font-weight: 700; color: #1a1a2e;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .topbar-title svg { color: #4f46e5; }
+
+    /* ── MODE SWITCHER ── */
+    .mode-switcher {
+      display: flex; background: #f3f4f6;
+      border-radius: 10px; padding: 4px; gap: 4px;
+    }
+    .mode-btn {
+      padding: 8px 22px; border: none; border-radius: 7px;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      transition: all .2s; background: transparent; color: #6b7280;
+    }
+    .mode-btn.active {
+      background: #fff; color: #4f46e5;
+      box-shadow: 0 1px 6px rgba(79,70,229,.15);
+    }
+    .mode-btn.active.leave { color: #10b981; }
+
+    /* ── MAIN LAYOUT ── */
+    .main { display: flex; gap: 0; height: calc(100vh - 61px); }
+
+    /* ── SIDEBAR ── */
+    .sidebar {
+      width: 240px; background: #fff;
+      border-right: 1px solid #e5e7eb;
+      padding: 20px 16px; flex-shrink: 0; overflow-y: auto;
+    }
+    .sidebar-section { margin-bottom: 24px; }
+    .sidebar-label {
+      font-size: 11px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .8px;
+      color: #9ca3af; margin-bottom: 10px;
+    }
+    .legend-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 5px 0; font-size: 13px; color: #374151;
+    }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .mini-stat {
+      background: #f9fafb; border-radius: 8px;
+      padding: 12px; margin-bottom: 8px;
+    }
+    .mini-stat-label { font-size: 11px; color: #9ca3af; margin-bottom: 2px; }
+    .mini-stat-val { font-size: 22px; font-weight: 700; }
+
+    /* Current user badge */
+    .user-badge {
+      display: flex; align-items: center; gap: 8px;
+      background: #ecfdf5; border: 1px solid #a7f3d0;
+      border-radius: 10px; padding: 10px 12px;
+      margin-bottom: 12px;
+    }
+    .user-badge-avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: #10b981; color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 700; flex-shrink: 0;
+    }
+    .user-badge-info { flex: 1; min-width: 0; }
+    .user-badge-name { font-size: 13px; font-weight: 600; color: #065f46; truncate: ellipsis; overflow: hidden; white-space: nowrap; }
+    .user-badge-sub  { font-size: 11px; color: #6b7280; }
+    .user-badge-edit {
+      width: 24px; height: 24px; border-radius: 50%; border: none;
+      background: transparent; cursor: pointer; color: #6b7280; font-size: 13px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .user-badge-edit:hover { background: #d1fae5; }
+
+    /* ── CALENDAR AREA ── */
+    .calendar-wrap { flex: 1; padding: 20px 24px; overflow-y: auto; }
+    .cal-header {
+      display: flex; align-items: center;
+      justify-content: space-between; margin-bottom: 16px;
+    }
+    .cal-nav { display: flex; align-items: center; gap: 12px; }
+    .cal-nav-btn {
+      width: 32px; height: 32px; border: 1px solid #e5e7eb;
+      border-radius: 8px; background: #fff; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; transition: background .15s;
+    }
+    .cal-nav-btn:hover { background: #f3f4f6; }
+    .cal-month-title { font-size: 18px; font-weight: 700; min-width: 180px; text-align: center; }
+    .cal-actions { display: flex; gap: 8px; }
+    .btn-today {
+      padding: 7px 16px; border: 1px solid #e5e7eb; border-radius: 8px;
+      background: #fff; font-size: 13px; cursor: pointer; font-weight: 500;
+      transition: background .15s;
+    }
+    .btn-today:hover { background: #f3f4f6; }
+
+    /* ── GRID ── */
+    .cal-grid {
+      background: #fff; border-radius: 14px;
+      box-shadow: 0 1px 6px rgba(0,0,0,.06);
+      overflow: hidden; border: 1px solid #e5e7eb;
+    }
+    .cal-weekdays {
+      display: grid; grid-template-columns: repeat(7, 1fr);
+      background: #f9fafb; border-bottom: 1px solid #e5e7eb;
+    }
+    .cal-weekday {
+      text-align: center; padding: 10px 0;
+      font-size: 12px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .5px; color: #9ca3af;
+    }
+    .cal-days { display: grid; grid-template-columns: repeat(7, 1fr); }
+    .cal-cell {
+      min-height: 110px; border-right: 1px solid #f0f0f0;
+      border-bottom: 1px solid #f0f0f0; padding: 6px;
+      cursor: pointer; transition: background .15s; position: relative;
+    }
+    .cal-cell:nth-child(7n) { border-right: none; }
+    .cal-cell:hover { background: #f9fafb; }
+    .cal-cell.other-month { background: #fafafa; }
+    .cal-cell.other-month .day-num { color: #d1d5db; }
+    .cal-cell.today { background: #eef2ff; }
+    .cal-cell.selected-range { background: #ecfdf5; }
+    .cal-cell.selected-single { background: #d1fae5; }
+    .day-num {
+      font-size: 13px; font-weight: 600; color: #374151;
+      width: 26px; height: 26px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 4px;
+    }
+    .cal-cell.today .day-num { background: #4f46e5; color: #fff; }
+
+    .event-chip {
+      display: flex; align-items: center; gap: 4px;
+      padding: 2px 6px; border-radius: 4px; font-size: 10px;
+      font-weight: 600; margin-bottom: 2px;
+      overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 100%;
+    }
+    /* Quarterly Closing */
+    .chip-tcv      { background: #ede9fe; color: #5b21b6; }
+    .chip-bookings { background: #dbeafe; color: #1e40af; }
+    .chip-funder   { background: #fef3c7; color: #92400e; }
+    .chip-custom   { background: #fce7f3; color: #9d174d; }
+    /* Leave */
+    .chip-leave      { background: #fee2e2; color: #991b1b; }
+    .chip-homeoffice { background: #d1fae5; color: #065f46; }
+    .chip-onduty     { background: #e0f2fe; color: #0c4a6e; }
+
+    /* ── MODAL OVERLAY ── */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.35); z-index: 1000;
+      align-items: center; justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: #fff; border-radius: 16px; width: 440px;
+      max-height: 90vh; overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0,0,0,.18);
+      animation: slideUp .2s ease;
+    }
+    @keyframes slideUp {
+      from { transform: translateY(30px); opacity: 0; }
+      to   { transform: translateY(0);    opacity: 1; }
+    }
+    .modal-header {
+      padding: 20px 24px 16px; border-bottom: 1px solid #f0f0f0;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .modal-header-left { display: flex; flex-direction: column; gap: 2px; }
+    .modal-title  { font-size: 16px; font-weight: 700; }
+    .modal-date   { font-size: 12px; color: #6b7280; }
+    .modal-close {
+      width: 30px; height: 30px; border-radius: 50%; border: none;
+      background: #f3f4f6; cursor: pointer; font-size: 16px;
+      display: flex; align-items: center; justify-content: center; color: #6b7280;
+    }
+    .modal-close:hover { background: #e5e7eb; }
+    .modal-body { padding: 20px 24px; display: flex; flex-direction: column; gap: 16px; }
+
+    /* ── FORM ── */
+    .form-row { display: flex; flex-direction: column; gap: 6px; }
+    .form-label { font-size: 12px; font-weight: 600; color: #374151; }
+    .form-input, .form-select, .form-textarea {
+      width: 100%; padding: 9px 12px; border: 1.5px solid #e5e7eb;
+      border-radius: 8px; font-size: 14px; outline: none;
+      transition: border-color .15s; font-family: inherit;
+    }
+    .form-input:focus, .form-select:focus, .form-textarea:focus { border-color: #4f46e5; }
+    .form-textarea { resize: vertical; min-height: 72px; }
+
+    /* Time toggle */
+    .time-toggle { display: flex; gap: 8px; }
+    .time-toggle-btn {
+      flex: 1; padding: 8px; border: 1.5px solid #e5e7eb; border-radius: 8px;
+      background: #fff; font-size: 13px; font-weight: 500; cursor: pointer;
+      transition: all .15s; color: #6b7280;
+    }
+    .time-toggle-btn.active { border-color: #4f46e5; background: #eef2ff; color: #4f46e5; }
+    .time-inputs { display: none; gap: 8px; }
+    .time-inputs.visible { display: flex; }
+    .time-inputs .form-input { flex: 1; }
+
+    /* Workday pills */
+    .workday-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+    .wd-pill {
+      width: 34px; height: 34px; border-radius: 50%;
+      border: 1.5px solid #e5e7eb; background: #fff;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      transition: all .15s; color: #374151;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .wd-pill:hover { border-color: #4f46e5; color: #4f46e5; }
+    .wd-pill.active { background: #4f46e5; border-color: #4f46e5; color: #fff; }
+
+    /* Category chips */
+    .cat-options { display: flex; flex-wrap: wrap; gap: 6px; }
+    .cat-chip {
+      padding: 5px 12px; border-radius: 20px; border: 1.5px solid #e5e7eb;
+      background: #fff; font-size: 12px; font-weight: 600;
+      cursor: pointer; transition: all .15s; color: #6b7280;
+    }
+    .cat-chip:hover { border-color: #4f46e5; color: #4f46e5; }
+    .cat-chip.active-tcv      { background: #ede9fe; border-color: #5b21b6; color: #5b21b6; }
+    .cat-chip.active-bookings { background: #dbeafe; border-color: #1e40af; color: #1e40af; }
+    .cat-chip.active-funder   { background: #fef3c7; border-color: #92400e; color: #92400e; }
+    .cat-chip.active-custom   { background: #fce7f3; border-color: #9d174d; color: #9d174d; }
+    .cat-chip.active-leave      { background: #fee2e2; border-color: #991b1b; color: #991b1b; }
+    .cat-chip.active-homeoffice { background: #d1fae5; border-color: #065f46; color: #065f46; }
+    .cat-chip.active-onduty     { background: #e0f2fe; border-color: #0c4a6e; color: #0c4a6e; }
+    .custom-cat-row { display: none; gap: 8px; }
+    .custom-cat-row.visible { display: flex; }
+
+    /* Date range display */
+    .date-range-display {
+      background: #f9fafb; border-radius: 8px;
+      padding: 10px 12px; font-size: 13px; color: #374151;
+    }
+    .date-range-display strong { color: #10b981; }
+
+    /* Modal footer */
+    .modal-footer {
+      padding: 16px 24px 20px; border-top: 1px solid #f0f0f0;
+      display: flex; gap: 10px; justify-content: flex-end;
+    }
+    .btn-cancel {
+      padding: 9px 20px; border: 1.5px solid #e5e7eb; border-radius: 8px;
+      background: #fff; font-size: 14px; cursor: pointer; font-weight: 500; color: #6b7280;
+    }
+    .btn-cancel:hover { background: #f3f4f6; }
+    .btn-save {
+      padding: 9px 24px; border: none; border-radius: 8px;
+      background: #4f46e5; color: #fff; font-size: 14px;
+      font-weight: 600; cursor: pointer; transition: background .15s;
+    }
+    .btn-save:hover { background: #4338ca; }
+    .btn-save.green { background: #10b981; }
+    .btn-save.green:hover { background: #059669; }
+
+    /* Range selection hint */
+    .range-hint {
+      background: #ecfdf5; border: 1px solid #a7f3d0;
+      border-radius: 8px; padding: 8px 12px;
+      font-size: 12px; color: #065f46; display: none; margin-bottom: 12px;
+    }
+    .range-hint.visible { display: block; }
+    .range-hint-user {
+      font-weight: 700; color: #065f46;
+    }
+
+    /* ── NAME MODAL ── */
+    #modal-name .modal { width: 380px; }
+    .name-modal-icon {
+      width: 56px; height: 56px; border-radius: 50%;
+      background: linear-gradient(135deg, #10b981, #059669);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 26px; margin: 0 auto 12px;
+    }
+    .name-modal-heading { text-align: center; font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+    .name-modal-sub { text-align: center; font-size: 13px; color: #6b7280; margin-bottom: 20px; }
+    .name-input-wrap { position: relative; }
+    .name-input-wrap .form-input { padding-left: 38px; font-size: 15px; }
+    .name-input-icon {
+      position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+      font-size: 16px; pointer-events: none;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed; bottom: 24px; right: 24px;
+      background: #1f2937; color: #fff; padding: 12px 20px;
+      border-radius: 10px; font-size: 14px; font-weight: 500;
+      z-index: 2000; opacity: 0; transform: translateY(10px);
+      transition: all .3s; pointer-events: none;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+
+    @media (max-width: 640px) {
+      .sidebar { display: none; }
+      .modal { width: 95vw; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="topbar-title">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <rect x="3" y="4" width="18" height="18" rx="2"/>
+      <line x1="16" y1="2" x2="16" y2="6"/>
+      <line x1="8"  y1="2" x2="8"  y2="6"/>
+      <line x1="3"  y1="10" x2="21" y2="10"/>
+    </svg>
+    Team Calendar Planner
+  </div>
+
+  <div class="mode-switcher">
+    <button class="mode-btn active" id="btn-quarterly" onclick="switchMode('quarterly')">
+      📊 Quarterly Closing
+    </button>
+    <button class="mode-btn" id="btn-leave" onclick="switchMode('leave')">
+      🌴 Leave Schedule
+    </button>
+  </div>
+
+  <div style="width:160px"></div>
+</div>
+
+<div class="main">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+
+    <!-- User badge (leave mode only) -->
+    <div id="leave-user-section" style="display:none" class="sidebar-section">
+      <div class="sidebar-label">Current User</div>
+      <div class="user-badge">
+        <div class="user-badge-avatar" id="sidebar-avatar">?</div>
+        <div class="user-badge-info">
+          <div class="user-badge-name" id="sidebar-name">—</div>
+          <div class="user-badge-sub">Leave Schedule</div>
+        </div>
+        <button class="user-badge-edit" title="Change name" onclick="openNameModal(true)">✏️</button>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Legend</div>
+      <div id="legend-quarterly">
+        <div class="legend-item"><div class="legend-dot" style="background:#7c3aed"></div> TCV</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#1d4ed8"></div> Bookings</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#d97706"></div> Funder Report</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#be185d"></div> Custom</div>
+      </div>
+      <div id="legend-leave" style="display:none">
+        <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div> Leave</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#10b981"></div> Home Office</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#0ea5e9"></div> On Duty</div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">This Month</div>
+      <div class="mini-stat">
+        <div class="mini-stat-label" id="stat-label">Total Events</div>
+        <div class="mini-stat-val" id="stat-total" style="color:#4f46e5">0</div>
+      </div>
+      <div class="mini-stat" id="stat-leave-box" style="display:none">
+        <div class="mini-stat-label">Leave Days</div>
+        <div class="mini-stat-val" id="stat-leave-days" style="color:#ef4444">0</div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Quick Tips</div>
+      <div style="font-size:12px; color:#6b7280; line-height:1.6" id="tip-quarterly">
+        Click any date to add a Quarterly Closing event. Select WorkDay, Category, and description.
+      </div>
+      <div style="font-size:12px; color:#6b7280; line-height:1.6; display:none" id="tip-leave">
+        Click a start date, then click an end date to select a range. Your name will appear on each leave chip.
+      </div>
+    </div>
+  </aside>
+
+  <!-- CALENDAR -->
+  <div class="calendar-wrap">
+    <div class="cal-header">
+      <div class="cal-nav">
+        <button class="cal-nav-btn" onclick="changeMonth(-1)">‹</button>
+        <div class="cal-month-title" id="month-title"></div>
+        <button class="cal-nav-btn" onclick="changeMonth(1)">›</button>
+      </div>
+      <div class="cal-actions">
+        <button class="btn-today" onclick="goToday()">Today</button>
+      </div>
+    </div>
+
+    <div class="range-hint" id="range-hint">
+      📅 <strong>Leave mode — <span class="range-hint-user" id="hint-user-name"></span></strong>: Click the first date, then click the end date to set a range.
+    </div>
+
+    <div class="cal-grid">
+      <div class="cal-weekdays">
+        <div class="cal-weekday">Sun</div>
+        <div class="cal-weekday">Mon</div>
+        <div class="cal-weekday">Tue</div>
+        <div class="cal-weekday">Wed</div>
+        <div class="cal-weekday">Thu</div>
+        <div class="cal-weekday">Fri</div>
+        <div class="cal-weekday">Sat</div>
+      </div>
+      <div class="cal-days" id="cal-days"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════
+     NAME MODAL
+══════════════════════════════════ -->
+<div class="modal-overlay" id="modal-name">
+  <div class="modal" style="width:380px">
+    <div class="modal-body" style="padding:28px 28px 8px">
+      <div class="name-modal-icon">🌴</div>
+      <div class="name-modal-heading">Who are you?</div>
+      <div class="name-modal-sub">Enter your name to start scheduling leave.<br>It will appear on each event in the calendar.</div>
+      <div class="form-row">
+        <div class="form-label">Your Name</div>
+        <div class="name-input-wrap">
+          <span class="name-input-icon">👤</span>
+          <input type="text" class="form-input" id="name-input"
+            placeholder="e.g. Sarah Chen"
+            onkeydown="if(event.key==='Enter') saveName()" />
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" id="name-cancel-btn" onclick="cancelNameModal()" style="display:none">Cancel</button>
+      <button class="btn-save green" onclick="saveName()" style="width:100%">Confirm & Enter Leave Mode</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════
+     QUARTERLY CLOSING MODAL
+══════════════════════════════════ -->
+<div class="modal-overlay" id="modal-quarterly">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-header-left">
+        <div class="modal-title">📊 Quarterly Closing Event</div>
+        <div class="modal-date" id="qc-date-label"></div>
+      </div>
+      <button class="modal-close" onclick="closeModal('quarterly')">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <div class="form-row">
+        <div class="form-label">Time</div>
+        <div class="time-toggle">
+          <button class="time-toggle-btn active" onclick="toggleTime(this,'allday')">All Day</button>
+          <button class="time-toggle-btn" onclick="toggleTime(this,'time')">Specific Time</button>
+        </div>
+        <div class="time-inputs" id="qc-time-inputs">
+          <input type="time" class="form-input" id="qc-start" value="09:00" />
+          <span style="align-self:center; color:#9ca3af">–</span>
+          <input type="time" class="form-input" id="qc-end" value="10:00" />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-label">WorkDay</div>
+        <div class="workday-pills" id="workday-pills"></div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-label">Category</div>
+        <div class="cat-options">
+          <button class="cat-chip" onclick="selectCat(this,'tcv')"      data-cat="tcv">TCV</button>
+          <button class="cat-chip" onclick="selectCat(this,'bookings')" data-cat="bookings">Bookings</button>
+          <button class="cat-chip" onclick="selectCat(this,'funder')"   data-cat="funder">Funder Report</button>
+          <button class="cat-chip" onclick="selectCat(this,'custom')"   data-cat="custom">+ Custom</button>
+        </div>
+        <div class="custom-cat-row" id="custom-cat-row">
+          <input type="text" class="form-input" id="custom-cat-input" placeholder="Enter custom category…" />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-label">Events</div>
+        <textarea class="form-textarea" id="qc-events" placeholder="Describe the event…"></textarea>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeModal('quarterly')">Cancel</button>
+      <button class="btn-save" onclick="saveQuarterly()">Save Event</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════
+     LEAVE SCHEDULE MODAL
+══════════════════════════════════ -->
+<div class="modal-overlay" id="modal-leave">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-header-left">
+        <div class="modal-title">🌴 Leave Schedule</div>
+        <div class="modal-date" id="leave-date-label"></div>
+      </div>
+      <button class="modal-close" onclick="closeModal('leave')">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Name display (read-only in this modal) -->
+      <div class="form-row">
+        <div class="form-label">Name</div>
+        <div style="display:flex; align-items:center; gap:8px; background:#f0fdf4; border-radius:8px; padding:8px 12px; font-size:14px; font-weight:600; color:#065f46;">
+          <span>👤</span>
+          <span id="leave-modal-name">—</span>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-label">Selected Period</div>
+        <div class="date-range-display" id="leave-range-display">—</div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-label">Leave Type</div>
+        <div class="cat-options">
+          <button class="cat-chip" onclick="selectLeaveCat(this,'leave')"      data-cat="leave">🏖️ Leave</button>
+          <button class="cat-chip" onclick="selectLeaveCat(this,'homeoffice')" data-cat="homeoffice">🏠 Home Office</button>
+          <button class="cat-chip" onclick="selectLeaveCat(this,'onduty')"     data-cat="onduty">💼 On Duty</button>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-label">Note (optional)</div>
+        <textarea class="form-textarea" id="leave-note" placeholder="Any additional notes…" style="min-height:60px"></textarea>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeModal('leave')">Cancel</button>
+      <button class="btn-save green" onclick="saveLeave()">Save Leave</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+  /* ════════════════════════════
+     STATE  (two separate stores)
+  ════════════════════════════ */
+  let currentMode = 'quarterly';
+  let currentYear, currentMonth;
+
+  // ★ Separate data stores
+  let qcEvents    = {};   // Quarterly Closing: { "YYYY-MM-DD": [...] }
+  let leaveEvents = {};   // Leave Schedule:    { "YYYY-MM-DD": [...] }
+
+  // Leave-mode state
+  let leaveName       = '';      // current user's name
+  let leaveRangeStart = null;
+  let leaveRangeEnd   = null;
+  let selectedLeaveCatVal = null;
+  let nameModalFromEdit   = false; // opened from "edit" pencil
+
+  // Quarterly-mode state
+  let selectedQCDate  = null;
+  let selectedWorkDay = null;
+  let selectedCat     = null;
+
+  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+  /* ── INIT ── */
+  function init() {
+    const now = new Date();
+    currentYear  = now.getFullYear();
+    currentMonth = now.getMonth();
+    buildWorkdayPills();
+    renderCalendar();
+  }
+
+  function buildWorkdayPills() {
+    const wrap = document.getElementById('workday-pills');
+    wrap.innerHTML = '';
+    for (let i = 1; i <= 10; i++) {
+      const btn = document.createElement('button');
+      btn.className = 'wd-pill';
+      btn.textContent = i;
+      btn.onclick = () => {
+        document.querySelectorAll('.wd-pill').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        selectedWorkDay = i;
+      };
+      wrap.appendChild(btn);
+    }
+  }
+
+  /* ════════════════════════════
+     MODE SWITCH
+  ════════════════════════════ */
+  function switchMode(mode) {
+    if (mode === 'leave' && !leaveName) {
+      // Must set name first
+      openNameModal(false);
+      return;
+    }
+    applyMode(mode);
+  }
+
+  function applyMode(mode) {
+    currentMode = mode;
+    document.getElementById('btn-quarterly').classList.toggle('active', mode === 'quarterly');
+    document.getElementById('btn-leave').classList.toggle('active', mode === 'leave');
+    document.getElementById('legend-quarterly').style.display    = mode === 'quarterly' ? '' : 'none';
+    document.getElementById('legend-leave').style.display        = mode === 'leave'      ? '' : 'none';
+    document.getElementById('tip-quarterly').style.display       = mode === 'quarterly' ? '' : 'none';
+    document.getElementById('tip-leave').style.display           = mode === 'leave'      ? '' : 'none';
+    document.getElementById('stat-leave-box').style.display      = mode === 'leave'      ? '' : 'none';
+    document.getElementById('leave-user-section').style.display  = mode === 'leave'      ? '' : 'none';
+    document.getElementById('range-hint').classList.toggle('visible', mode === 'leave');
+
+    if (mode === 'leave') {
+      document.getElementById('btn-leave').classList.add('leave');
+      document.getElementById('hint-user-name').textContent = leaveName;
+      updateSidebarUser();
+    } else {
+      document.getElementById('btn-leave').classList.remove('leave');
+    }
+
+    leaveRangeStart = leaveRangeEnd = null;
+    renderCalendar();
+  }
+
+  /* ════════════════════════════
+     NAME MODAL
+  ════════════════════════════ */
+  function openNameModal(fromEdit) {
+    nameModalFromEdit = fromEdit;
+    document.getElementById('name-input').value = leaveName;
+    document.getElementById('name-cancel-btn').style.display = fromEdit ? '' : 'none';
+    document.getElementById('modal-name').classList.add('open');
+    setTimeout(() => document.getElementById('name-input').focus(), 100);
+  }
+
+  function saveName() {
+    const val = document.getElementById('name-input').value.trim();
+    if (!val) { showToast('⚠️ Please enter your name.'); return; }
+    leaveName = val;
+    document.getElementById('modal-name').classList.remove('open');
+    if (!nameModalFromEdit) {
+      applyMode('leave');
+    } else {
+      // just update UI
+      updateSidebarUser();
+      document.getElementById('hint-user-name').textContent = leaveName;
+    }
+    showToast(`👋 Welcome, ${leaveName}!`);
+  }
+
+  function cancelNameModal() {
+    document.getElementById('modal-name').classList.remove('open');
+  }
+
+  function updateSidebarUser() {
+    document.getElementById('sidebar-name').textContent = leaveName;
+    document.getElementById('sidebar-avatar').textContent = leaveName.charAt(0).toUpperCase();
+  }
+
+  /* ════════════════════════════
+     CALENDAR RENDER
+  ════════════════════════════ */
+  function renderCalendar() {
+    document.getElementById('month-title').textContent = `${MONTHS[currentMonth]} ${currentYear}`;
+    const container = document.getElementById('cal-days');
+    container.innerHTML = '';
+
+    const firstDay    = new Date(currentYear, currentMonth, 1).getDay();
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    const daysInPrev  = new Date(currentYear, currentMonth, 0).getDate();
+    const today       = new Date();
+    const totalCells  = Math.ceil((firstDay + daysInMonth) / 7) * 7;
+
+    for (let i = 0; i < totalCells; i++) {
+      let day, month, year, isOther = false;
+      if (i < firstDay) {
+        day = daysInPrev - firstDay + i + 1;
+        month = currentMonth - 1; year = currentYear;
+        if (month < 0) { month = 11; year--; }
+        isOther = true;
+      } else if (i >= firstDay + daysInMonth) {
+        day = i - firstDay - daysInMonth + 1;
+        month = currentMonth + 1; year = currentYear;
+        if (month > 11) { month = 0; year++; }
+        isOther = true;
+      } else {
+        day = i - firstDay + 1; month = currentMonth; year = currentYear;
+      }
+
+      const dateStr  = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+      const isToday  = (year === today.getFullYear() && month === today.getMonth() && day === today.getDate());
+      const inRange  = isInRange(dateStr);
+      const isEdge   = (leaveRangeStart === dateStr || leaveRangeEnd === dateStr);
+
+      const cell = document.createElement('div');
+      cell.className = 'cal-cell'
+        + (isOther ? ' other-month' : '')
+        + (isToday ? ' today'       : '')
+        + (inRange && currentMode === 'leave' ? ' selected-range' : '')
+        + (isEdge  && currentMode === 'leave' ? ' selected-single' : '');
+
+      cell.innerHTML = `<div class="day-num">${day}</div>`;
+
+      // ★ Render events from the CORRECT store only
+      const store = currentMode === 'quarterly' ? qcEvents : leaveEvents;
+      const dayEvents = store[dateStr] || [];
+
+      dayEvents.forEach(ev => {
+        const chip = document.createElement('div');
+        chip.className = `event-chip chip-${ev.catClass}`;
+        chip.title = ev.tooltip || ev.label;
+        let icon = '';
+        if (ev.type === 'quarterly')        icon = '📊 ';
+        if (ev.catClass === 'leave')        icon = '🏖️ ';
+        if (ev.catClass === 'homeoffice')   icon = '🏠 ';
+        if (ev.catClass === 'onduty')       icon = '💼 ';
+        chip.textContent = icon + ev.label;
+        cell.appendChild(chip);
+      });
+
+      cell.addEventListener('click', () => handleDateClick(dateStr, isOther));
+      container.appendChild(cell);
+    }
+    updateStats();
+  }
+
+  function isInRange(dateStr) {
+    if (!leaveRangeStart) return false;
+    const d = new Date(dateStr);
+    const s = new Date(leaveRangeStart);
+    if (!leaveRangeEnd) return dateStr === leaveRangeStart;
+    const e = new Date(leaveRangeEnd);
+    return d >= s && d <= e;
+  }
+
+  function handleDateClick(dateStr, isOther) {
+    if (isOther) return;
+    if (currentMode === 'quarterly') openQuarterlyModal(dateStr);
+    else handleLeaveClick(dateStr);
+  }
+
+  /* ════════════════════════════
+     QUARTERLY CLOSING
+  ════════════════════════════ */
+  function openQuarterlyModal(dateStr) {
+    selectedQCDate = dateStr;
+    selectedWorkDay = null;
+    selectedCat = null;
+    document.querySelectorAll('.wd-pill').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('#modal-quarterly .cat-chip').forEach(c => c.className = 'cat-chip');
+    document.getElementById('custom-cat-row').classList.remove('visible');
+    document.getElementById('custom-cat-input').value = '';
+    document.getElementById('qc-events').value = '';
+    document.getElementById('qc-time-inputs').classList.remove('visible');
+    document.querySelectorAll('.time-toggle-btn').forEach((b,i) => b.classList.toggle('active', i===0));
+
+    const d = new Date(dateStr);
+    document.getElementById('qc-date-label').textContent =
+      d.toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+    document.getElementById('modal-quarterly').classList.add('open');
+  }
+
+  function toggleTime(btn, type) {
+    document.querySelectorAll('.time-toggle-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('qc-time-inputs').classList.toggle('visible', type === 'time');
+  }
+
+  function selectCat(btn, cat) {
+    document.querySelectorAll('#modal-quarterly .cat-chip').forEach(c => c.className = 'cat-chip');
+    btn.classList.add(`active-${cat}`);
+    selectedCat = cat;
+    document.getElementById('custom-cat-row').classList.toggle('visible', cat === 'custom');
+  }
+
+  function saveQuarterly() {
+    if (!selectedQCDate) return;
+    const evText = document.getElementById('qc-events').value.trim();
+    if (!evText)          { showToast('⚠️ Please enter an event description.'); return; }
+    if (!selectedCat)     { showToast('⚠️ Please select a category.');           return; }
+    if (!selectedWorkDay) { showToast('⚠️ Please select a WorkDay.');             return; }
+
+    let catLabel = selectedCat.toUpperCase();
+    if (selectedCat === 'funder')   catLabel = 'Funder Report';
+    if (selectedCat === 'bookings') catLabel = 'Bookings';
+    if (selectedCat === 'custom')   catLabel = document.getElementById('custom-cat-input').value.trim() || 'Custom';
+
+    const allDay  = !document.getElementById('qc-time-inputs').classList.contains('visible');
+    const timeStr = allDay ? 'All Day' : `${document.getElementById('qc-start').value}–${document.getElementById('qc-end').value}`;
+
+    // ★ Save into qcEvents (Quarterly store)
+    if (!qcEvents[selectedQCDate]) qcEvents[selectedQCDate] = [];
+    qcEvents[selectedQCDate].push({
+      type: 'quarterly',
+      workday: selectedWorkDay,
+      cat: catLabel, catClass: selectedCat,
+      events: evText, time: timeStr,
+      label: `WD${selectedWorkDay} · ${catLabel}`,
+      tooltip: `WD${selectedWorkDay} | ${catLabel} | ${timeStr}\n${evText}`
+    });
+
+    closeModal('quarterly');
+    renderCalendar();
+    showToast(`✅ Event saved for ${selectedQCDate}`);
+  }
+
+  /* ════════════════════════════
+     LEAVE SCHEDULE
+  ════════════════════════════ */
+  function handleLeaveClick(dateStr) {
+    if (!leaveRangeStart) {
+      leaveRangeStart = dateStr;
+      leaveRangeEnd   = null;
+      renderCalendar();
+      showToast('📅 Start date set. Click an end date to select the range.');
+    } else if (!leaveRangeEnd) {
+      if (dateStr < leaveRangeStart) {
+        leaveRangeEnd   = leaveRangeStart;
+        leaveRangeStart = dateStr;
+      } else {
+        leaveRangeEnd = dateStr;
+      }
+      renderCalendar();
+      openLeaveModal();
+    } else {
+      leaveRangeStart = dateStr;
+      leaveRangeEnd   = null;
+      renderCalendar();
+      showToast('📅 New start date selected.');
+    }
+  }
+
+  function openLeaveModal() {
+    selectedLeaveCatVal = null;
+    document.querySelectorAll('#modal-leave .cat-chip').forEach(c => c.className = 'cat-chip');
+    document.getElementById('leave-note').value = '';
+    document.getElementById('leave-modal-name').textContent = leaveName;
+
+    const s   = new Date(leaveRangeStart);
+    const e   = new Date(leaveRangeEnd);
+    const fmt = d => d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+    const isSame = leaveRangeStart === leaveRangeEnd;
+    const diff   = Math.round((e - s) / 86400000) + 1;
+
+    document.getElementById('leave-date-label').textContent = isSame ? fmt(s) : `${fmt(s)} → ${fmt(e)}`;
+    document.getElementById('leave-range-display').innerHTML = isSame
+      ? `<strong>${fmt(s)}</strong>`
+      : `<strong>${fmt(s)}</strong>&nbsp;→&nbsp;<strong>${fmt(e)}</strong>&nbsp;<span style="color:#6b7280">(${diff} day${diff>1?'s':''})</span>`;
+
+    document.getElementById('modal-leave').classList.add('open');
+  }
+
+  function selectLeaveCat(btn, cat) {
+    document.querySelectorAll('#modal-leave .cat-chip').forEach(c => c.className = 'cat-chip');
+    btn.classList.add(`active-${cat}`);
+    selectedLeaveCatVal = cat;
+  }
+
+  function saveLeave() {
+    if (!selectedLeaveCatVal) { showToast('⚠️ Please select a leave type.'); return; }
+
+    const s    = new Date(leaveRangeStart);
+    const e    = new Date(leaveRangeEnd || leaveRangeStart);
+    const note = document.getElementById('leave-note').value.trim();
+    const catLabels = { leave:'Leave', homeoffice:'Home Office', onduty:'On Duty' };
+    const catLabel  = catLabels[selectedLeaveCatVal];
+
+    // ★ Save into leaveEvents (Leave store) with name included in label
+    for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+      const key = d.toISOString().slice(0, 10);
+      if (!leaveEvents[key]) leaveEvents[key] = [];
+      leaveEvents[key].push({
+        type: 'leave',
+        name: leaveName,
+        cat: catLabel,
+        catClass: selectedLeaveCatVal,
+        note,
+        label: `${leaveName} · ${catLabel}`,      // ★ name shown on chip
+        tooltip: `${leaveName} | ${catLabel}${note ? '\n' + note : ''}`
+      });
+    }
+
+    leaveRangeStart = leaveRangeEnd = null;
+    closeModal('leave');
+    renderCalendar();
+    showToast(`✅ Leave saved for ${leaveName}!`);
+  }
+
+  /* ════════════════════════════
+     UTILS
+  ════════════════════════════ */
+  function closeModal(type) {
+    document.getElementById(`modal-${type}`).classList.remove('open');
+    if (type === 'leave') { leaveRangeStart = leaveRangeEnd = null; renderCalendar(); }
+  }
+
+  function changeMonth(delta) {
+    currentMonth += delta;
+    if (currentMonth > 11) { currentMonth = 0;  currentYear++; }
+    if (currentMonth <  0) { currentMonth = 11; currentYear--; }
+    leaveRangeStart = leaveRangeEnd = null;
+    renderCalendar();
+  }
+
+  function goToday() {
+    const now = new Date();
+    currentYear = now.getFullYear(); currentMonth = now.getMonth();
+    renderCalendar();
+  }
+
+  function updateStats() {
+    const store = currentMode === 'quarterly' ? qcEvents : leaveEvents;
+    let total = 0, leaveDays = 0;
+    Object.entries(store).forEach(([key, arr]) => {
+      const d = new Date(key);
+      if (d.getFullYear() === currentYear && d.getMonth() === currentMonth) {
+        total += arr.length;
+        arr.forEach(ev => { if (ev.catClass === 'leave') leaveDays++; });
+      }
+    });
+    document.getElementById('stat-total').textContent = total;
+    document.getElementById('stat-label').textContent  = currentMode === 'quarterly' ? 'Total Events' : 'Total Entries';
+    document.getElementById('stat-leave-days').textContent = leaveDays;
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2800);
+  }
+
+  // Close modals on overlay click (except name modal when first time)
+  document.querySelectorAll('.modal-overlay').forEach(overlay => {
+    overlay.addEventListener('click', e => {
+      if (e.target !== overlay) return;
+      const type = overlay.id.replace('modal-', '');
+      if (type === 'name') {
+        if (nameModalFromEdit) cancelNameModal();
+        // don't close if forced name entry
+      } else {
+        closeModal(type);
+      }
+    });
+  });
+
+  init();
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "name": "team-planner-socket",
+  "version": "1.0.0",
+  "description": "Local Socket.IO server for Team Planner realtime syncing",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "socket.io": "^4.6.1"
+  }
+}
