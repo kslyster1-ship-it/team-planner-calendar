@@ -981,13 +981,9 @@ const MONTHS = ['January','February','March','April','May','June','July','August
 
 /* ── INIT ─────────────────────────────────────────────── */
 function init() {
-  /* Room ID from URL hash or generate new */
+  /* Room ID: use URL hash if provided, otherwise everyone shares the same default room */
   const m = location.hash.match(/[#&]room=([^&]+)/);
-  if (m) { roomId = m[1]; }
-  else {
-    roomId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-    history.replaceState(null, '', '#room=' + roomId);
-  }
+  roomId = m ? m[1] : 'default';
 
   /* Try config from localStorage first */
   try {
