@@ -249,14 +249,15 @@
     /* Chips – no limit, vertical stack */
     .chips{display:flex;flex-direction:column;gap:2px}
     .chip{
-      display:flex;align-items:center;gap:3px;
-      padding:2px 5px;border-radius:4px;
+      display:flex;flex-direction:column;gap:1px;
+      padding:3px 5px;border-radius:4px;
       font-size:10px;font-weight:600;line-height:1.4;
-      overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
       flex-shrink:0;
     }
+    .chip-top{display:flex;align-items:center;gap:3px}
     .chip-icon{flex-shrink:0;font-size:9px}
     .chip-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .chip-desc{font-size:9px;font-weight:400;color:inherit;opacity:.75;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .c-tcv      {background:var(--violet-100);color:var(--violet-700)}
     .c-bookings {background:var(--blue-100);  color:var(--blue-700)}
     .c-funder   {background:var(--amber-100); color:var(--amber-700)}
@@ -737,11 +738,11 @@
         </div>
       </div>
       <div class="fg">
-        <div class="fl">WorkDay <span>*</span></div>
+        <div class="fl">WorkDay <span class="opt">(optional)</span></div>
         <div class="wd-grid" id="wd-grid"></div>
       </div>
       <div class="fg">
-        <div class="fl">Category <span>*</span></div>
+        <div class="fl">Category <span class="opt">(optional)</span></div>
         <div class="cat-row">
           <button class="cat-b" onclick="pickCat(this,'tcv')">TCV</button>
           <button class="cat-b" onclick="pickCat(this,'bookings')">Bookings</button>
@@ -1154,8 +1155,9 @@ function render() {
       evArr.forEach(item => {
         const ev = item.ev, id = item.id;
         const c = document.createElement('div');
-        c.className = `chip c-${ev.catClass}`;
-        c.innerHTML = `<span class="chip-icon">${iconOf(ev.catClass)}</span><span class="chip-text">${ev.label}</span>`;
+        c.className = `chip c-${ev.catClass || 'custom'}`;
+        const descText = ev.desc || '';
+        c.innerHTML = `<div class="chip-top"><span class="chip-icon">${iconOf(ev.catClass)}</span><span class="chip-text">${ev.label}</span></div>${descText ? `<div class="chip-desc">${descText}</div>` : ''}`;
         c.title = ev.detail || '';
         c.addEventListener('click', e => { e.stopPropagation(); openEditModal(mode==='quarterly'?'qc':'lv', ds, id); });
         chips.appendChild(c);
@@ -1327,20 +1329,33 @@ function pickCat(btn, cat) {
   document.getElementById('cr-custom').classList.toggle('on', cat === 'custom');
 }
 function saveQC() {
-  if (!selWD)  { toast('⚠️ Select a WorkDay.');  return; }
-  if (!selCat) { toast('⚠️ Select a Category.'); return; }
   const desc = document.getElementById('qc-desc').value.trim();
-  if (!desc)   { toast('⚠️ Add an event description.'); return; }
+  if (!desc) { toast('⚠️ Add an event description.'); return; }
 
   const catMap = { tcv:'TCV', bookings:'Bookings', funder:'Funder Report' };
-  const catLabel = catMap[selCat] || (document.getElementById('custom-val').value.trim() || 'Custom');
+  const catLabel = selCat ? (catMap[selCat] || (document.getElementById('custom-val').value.trim() || 'Custom')) : '';
+  const catClass = selCat || 'custom';
   const allDay = !document.getElementById('time-row').classList.contains('on');
   const tStr   = allDay ? 'All Day' : `${document.getElementById('t-s').value}–${document.getElementById('t-e').value}`;
 
+  /* Build label from available parts */
+  const parts = [];
+  if (selWD) parts.push(`WD${selWD}`);
+  if (catLabel) parts.push(catLabel);
+  const label = parts.length > 0 ? parts.join(' · ') : desc.slice(0, 30);
+
+  /* Build detail from available parts */
+  const detailParts = [];
+  if (selWD) detailParts.push(`WorkDay ${selWD}`);
+  if (catLabel) detailParts.push(catLabel);
+  detailParts.push(tStr);
+  const detail = detailParts.join('  |  ') + '\n' + desc;
+
   writeEvent('qc', qcDate, {
-    catClass: selCat,
-    label:  `WD${selWD} · ${catLabel}`,
-    detail: `WorkDay ${selWD}  |  ${catLabel}  |  ${tStr}\n${desc}`
+    catClass,
+    label,
+    desc,
+    detail
   });
   closeModal('qc');
   toast(`✅ Event saved — ${fmt(qcDate)}`);
@@ -1451,6 +1466,7 @@ function saveLv() {
     writeEvent('lv', ds, {
       catClass: selLvCat, name: leaveName,
       label:  `${leaveName} · ${catLabel}`,
+      desc:   note || '',
       detail: `${leaveName}  |  ${catLabel}${note ? '\n'+note : ''}`
     });
   });
