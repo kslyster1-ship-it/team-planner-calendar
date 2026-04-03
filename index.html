@@ -180,7 +180,7 @@
     .uc-edit svg{width:11px;height:11px}
     .legend-list{display:flex;flex-direction:column;gap:5px}
     .legend-item{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:500;color:var(--gray-600)}
-    .legend-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+    .legend-icon{flex-shrink:0;font-size:13px;width:18px;text-align:center}
     .stat-cards{display:grid;grid-template-columns:1fr 1fr;gap:7px}
     .stat-card{background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--r-md);padding:9px 11px}
     .stat-card.full{grid-column:1/-1}
@@ -592,16 +592,11 @@
 
     <div>
       <div class="sb-title">Legend</div>
-      <div class="legend-list" id="leg-qc">
-        <div class="legend-item"><div class="legend-dot" style="background:#6d28d9"></div>TCV</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#1d4ed8"></div>Bookings</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#b45309"></div>Funder Report</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#be185d"></div>Custom</div>
-      </div>
+      <div class="legend-list" id="leg-qc"></div>
       <div class="legend-list" id="leg-lv" style="display:none">
-        <div class="legend-item"><div class="legend-dot" style="background:#dc2626"></div>Leave</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#16a34a"></div>Home Office</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#0369a1"></div>On Duty</div>
+        <div class="legend-item"><span class="legend-icon">🏖️</span>Leave</div>
+        <div class="legend-item"><span class="legend-icon">🏠</span>Home Office</div>
+        <div class="legend-item"><span class="legend-icon">💼</span>On Duty</div>
       </div>
     </div>
 
@@ -749,11 +744,7 @@
       <div class="fg">
         <div class="fl">Category <span class="opt">(optional)</span></div>
         <div class="cat-row" id="qc-cat-row">
-          <button class="cat-b" onclick="pickCat(this,'tcv')">TCV</button>
-          <button class="cat-b" onclick="pickCat(this,'bookings')">Bookings</button>
-          <button class="cat-b" onclick="pickCat(this,'funder')">Funder Report</button>
-          <!-- custom cats will be injected here -->
-          <button class="cat-b" onclick="pickCat(this,'custom')">＋ Custom</button>
+          <!-- all category buttons rendered dynamically by renderAllCats() -->
         </div>
         <div class="cr-custom" id="cr-custom">
           <input type="text" class="fi" id="custom-val" placeholder="Category name…"/>
@@ -830,13 +821,7 @@
       <div class="fg">
         <div class="fl">Category</div>
         <select id="edit-cat" class="fi">
-          <option value="tcv">TCV</option>
-          <option value="bookings">Bookings</option>
-          <option value="funder">Funder Report</option>
-          <option value="custom">Custom</option>
-          <option value="leave">Leave</option>
-          <option value="homeoffice">Home Office</option>
-          <option value="onduty">On Duty</option>
+          <!-- populated dynamically by openEditModal -->
         </select>
       </div>
       <div class="fg">
@@ -987,7 +972,7 @@ let rangeStart  = null, rangeEnd = null;
 let nameFromEdit = false;
 let qcDate = null, selWD = null, selCat = null, selLvCat = null;
 let editType = null, editDate = null, editId = null;
-let customCategories = []; // persisted custom category names
+let allCategories = []; // all QC categories (built-in + custom)
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -1025,10 +1010,10 @@ function init() {
 
   const now = new Date();
   cy = now.getFullYear(); cm = now.getMonth();
-  /* Load custom categories */
-  try { customCategories = JSON.parse(localStorage.getItem('customCats') || '[]'); } catch(_) {}
+  /* Load categories */
+  allCategories = loadCategories();
   buildWD();
-  renderCustomCats();
+  renderAllCats();
   render();
 }
 
@@ -1314,7 +1299,7 @@ function cancelName() { closeModal('nm'); }
 function openQCModal(ds) {
   qcDate = ds; selWD = null; selCat = null;
   document.querySelectorAll('.wd-pill').forEach(p => p.classList.remove('on'));
-  document.querySelectorAll('#ov-qc .cat-b').forEach(b => b.className = 'cat-b');
+  renderAllCats(); // re-render with no selection
   document.getElementById('cr-custom').classList.remove('on');
   document.getElementById('custom-val').value = '';
   document.getElementById('qc-desc').value    = '';
@@ -1327,7 +1312,7 @@ function openQCModal(ds) {
 }
 function buildWD() {
   const g = document.getElementById('wd-grid');
-  for (let i = 1; i <= 10; i++) {
+  for (let i = 1; i <= 23; i++) {
     const b = document.createElement('button');
     b.className = 'wd-pill'; b.textContent = i;
     b.onclick = () => {
@@ -1342,55 +1327,107 @@ function toggleTime(btn, type) {
   btn.classList.add('on');
   document.getElementById('time-row').classList.toggle('on', type === 'specific');
 }
-function pickCat(btn, cat) {
-  document.querySelectorAll('#ov-qc .cat-b').forEach(b => b.className = 'cat-b');
-  btn.className = `cat-b a-${cat}`;
-  selCat = cat;
-  document.getElementById('cr-custom').classList.toggle('on', cat === 'custom');
+function pickCat(catKey) {
+  selCat = catKey;
+  // re-render buttons so the selected one gets highlighted
+  renderAllCats();
+  document.getElementById('cr-custom').classList.toggle('on', catKey === '_new');
 }
 
-/* ── Custom Categories ─────────────────────────────────── */
-function renderCustomCats() {
+/* ── Category System (fully data-driven) ───────────────── */
+const DEFAULT_CATS = [
+  { key: 'tcv',      label: 'TCV',           icon: '📈', colorClass: 'tcv' },
+  { key: 'bookings', label: 'Bookings',      icon: '📋', colorClass: 'bookings' },
+  { key: 'funder',   label: 'Funder Report', icon: '📄', colorClass: 'funder' },
+];
+
+function loadCategories() {
+  try {
+    const stored = localStorage.getItem('allCats');
+    if (stored) return JSON.parse(stored);
+  } catch(_) {}
+  return DEFAULT_CATS.map(c => ({ ...c }));
+}
+
+function saveCategories() {
+  localStorage.setItem('allCats', JSON.stringify(allCategories));
+}
+
+function renderAllCats() {
   const row = document.getElementById('qc-cat-row');
   if (!row) return;
-  // remove old custom buttons
-  row.querySelectorAll('.cat-b-custom').forEach(el => el.remove());
-  // insert before the "+ Custom" button
-  const addBtn = row.querySelector('[onclick*="\'custom\'"]');
-  customCategories.forEach(name => {
+  row.innerHTML = '';
+
+  allCategories.forEach(cat => {
     const btn = document.createElement('button');
-    btn.className = 'cat-b cat-b-custom';
-    btn.innerHTML = `${name}<span class="cat-del" onclick="event.stopPropagation();deleteCustomCat('${name.replace(/'/g,"\\'")}')">×</span>`;
-    btn.addEventListener('click', () => pickCat(btn, 'custom_' + name));
-    row.insertBefore(btn, addBtn);
+    const isActive = selCat === cat.key;
+    btn.className = 'cat-b' + (isActive ? ` a-${cat.colorClass || 'custom'}` : '');
+    btn.innerHTML = `${cat.icon || '🏷️'} ${cat.label}<span class="cat-del" title="Delete category">×</span>`;
+    btn.addEventListener('click', (e) => {
+      if (e.target.classList.contains('cat-del')) {
+        e.stopPropagation();
+        deleteCat(cat.key);
+        return;
+      }
+      pickCat(cat.key);
+    });
+    row.appendChild(btn);
   });
-  // also update sidebar legend
-  renderCustomLegend();
+
+  // "+ New" button
+  const addBtn = document.createElement('button');
+  const isAddActive = selCat === '_new';
+  addBtn.className = 'cat-b' + (isAddActive ? ' a-custom' : '');
+  addBtn.textContent = '＋ New';
+  addBtn.addEventListener('click', () => pickCat('_new'));
+  row.appendChild(addBtn);
+
+  // Update sidebar legend
+  renderLegend();
 }
 
-function deleteCustomCat(name) {
-  customCategories = customCategories.filter(c => c !== name);
-  localStorage.setItem('customCats', JSON.stringify(customCategories));
-  renderCustomCats();
-  toast(`🗑️ Category "${name}" removed`);
+function deleteCat(key) {
+  allCategories = allCategories.filter(c => c.key !== key);
+  saveCategories();
+  if (selCat === key) selCat = null;
+  renderAllCats();
+  toast('🗑️ Category removed');
 }
 
-function renderCustomLegend() {
+function renderLegend() {
   const leg = document.getElementById('leg-qc');
-  leg.querySelectorAll('.legend-custom').forEach(el => el.remove());
-  customCategories.forEach(name => {
+  leg.innerHTML = '';
+  allCategories.forEach(cat => {
     const item = document.createElement('div');
-    item.className = 'legend-item legend-custom';
-    item.innerHTML = `<div class="legend-dot" style="background:#be185d"></div>${name}`;
+    item.className = 'legend-item';
+    item.innerHTML = `<span class="legend-icon">${cat.icon || '🏷️'}</span>${cat.label}`;
     leg.appendChild(item);
   });
 }
 function saveQC() {
   const desc = document.getElementById('qc-desc').value.trim();
 
-  const catMap = { tcv:'TCV', bookings:'Bookings', funder:'Funder Report' };
-  const catLabel = selCat ? (catMap[selCat] || (document.getElementById('custom-val').value.trim() || 'Custom')) : '';
-  const catClass = selCat || 'custom';
+  /* Resolve category */
+  let catLabel = '', catClass = 'custom';
+  if (selCat === '_new') {
+    const customName = document.getElementById('custom-val').value.trim();
+    if (customName) {
+      catLabel = customName;
+      catClass = 'custom';
+      // Add to allCategories if new
+      if (!allCategories.find(c => c.label === customName)) {
+        const newCat = { key: 'c_' + Date.now(), label: customName, icon: '🏷️', colorClass: 'custom' };
+        allCategories.push(newCat);
+        saveCategories();
+        renderAllCats();
+      }
+    }
+  } else if (selCat) {
+    const found = allCategories.find(c => c.key === selCat);
+    catLabel = found ? found.label : '';
+    catClass = found ? (found.colorClass || 'custom') : 'custom';
+  }
+
   const allDay = !document.getElementById('time-row').classList.contains('on');
   const tStr   = allDay ? 'All Day' : `${document.getElementById('t-s').value}–${document.getElementById('t-e').value}`;
 
@@ -1410,16 +1447,6 @@ function saveQC() {
   detailParts.push(tStr);
   const detail = detailParts.join('  |  ') + '\n' + desc;
 
-  /* Save new custom category if needed */
-  if (selCat === 'custom') {
-    const customName = document.getElementById('custom-val').value.trim();
-    if (customName && !customCategories.includes(customName)) {
-      customCategories.push(customName);
-      localStorage.setItem('customCats', JSON.stringify(customCategories));
-      renderCustomCats();
-    }
-  }
-
   writeEvent('qc', qcDate, {
     catClass,
     label,
@@ -1436,7 +1463,30 @@ function openEditModal(type, dateStr, id) {
   const store = type === 'qc' ? qcData : leaveData;
   const ev = (store[dateStr] || {})[id];
   if (!ev) { toast('⚠️ Event not found'); return; }
-  document.getElementById('edit-cat').value = ev.catClass || 'custom';
+
+  /* Populate category select dynamically */
+  const sel = document.getElementById('edit-cat');
+  sel.innerHTML = '';
+  const leaveOpts = [
+    { key: 'leave', label: 'Leave' },
+    { key: 'homeoffice', label: 'Home Office' },
+    { key: 'onduty', label: 'On Duty' },
+  ];
+  const opts = type === 'qc' ? allCategories : leaveOpts;
+  opts.forEach(c => {
+    const o = document.createElement('option');
+    o.value = c.colorClass || c.key;
+    o.textContent = c.label;
+    sel.appendChild(o);
+  });
+  // Add custom fallback option
+  if (type === 'qc') {
+    const o = document.createElement('option');
+    o.value = 'custom'; o.textContent = 'Custom';
+    sel.appendChild(o);
+  }
+
+  sel.value = ev.catClass || 'custom';
   document.getElementById('edit-label').value = ev.label || '';
   document.getElementById('edit-desc').value = ev.desc || '';
   document.getElementById('edit-detail').value = ev.detail || '';
@@ -1620,7 +1670,8 @@ function fmt(ds) {
   return new Date(ds).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
 }
 function iconOf(c) {
-  return {tcv:'📈',bookings:'📋',funder:'📄',custom:'🔖',leave:'🏖️',homeoffice:'🏠',onduty:'💼'}[c]||'•';
+  const builtin = {tcv:'📈',bookings:'📋',funder:'📄',custom:'🏷️',leave:'🏖️',homeoffice:'🏠',onduty:'💼'};
+  return builtin[c] || '🏷️';
 }
 function updateStats() {
   const store = mode === 'quarterly' ? qcData : leaveData;
