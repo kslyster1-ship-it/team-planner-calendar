@@ -215,7 +215,7 @@
       font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--gray-400);
     }
     .cal-wday:first-child,.cal-wday:last-child{color:#ef4444}
-    .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);align-items:start}
+    .cal-grid{display:grid;grid-template-columns:repeat(7,1fr)}
     .cal-cell{
       border-right:1px solid var(--gray-100);border-bottom:1px solid var(--gray-100);
       padding:6px;cursor:pointer;transition:background .12s;
@@ -384,6 +384,11 @@
     .cat-b.a-homeoffice {background:var(--green-50); border-color:var(--green-700); color:var(--green-700)}
     .cat-b.a-onduty     {background:var(--sky-50);   border-color:var(--sky-700);   color:var(--sky-700)}
     .cr-custom{display:none;gap:8px}.cr-custom.on{display:flex}
+    .cat-del{
+      margin-left:2px;font-size:10px;opacity:.5;cursor:pointer;border:none;background:none;
+      color:inherit;padding:0 2px;line-height:1;
+    }
+    .cat-del:hover{opacity:1}
 
     /* Range display */
     .range-disp{
@@ -743,10 +748,11 @@
       </div>
       <div class="fg">
         <div class="fl">Category <span class="opt">(optional)</span></div>
-        <div class="cat-row">
+        <div class="cat-row" id="qc-cat-row">
           <button class="cat-b" onclick="pickCat(this,'tcv')">TCV</button>
           <button class="cat-b" onclick="pickCat(this,'bookings')">Bookings</button>
           <button class="cat-b" onclick="pickCat(this,'funder')">Funder Report</button>
+          <!-- custom cats will be injected here -->
           <button class="cat-b" onclick="pickCat(this,'custom')">＋ Custom</button>
         </div>
         <div class="cr-custom" id="cr-custom">
@@ -754,7 +760,7 @@
         </div>
       </div>
       <div class="fg">
-        <div class="fl">Event Description <span>*</span></div>
+        <div class="fl">Event Description <span class="opt">(optional)</span></div>
         <textarea class="fta" id="qc-desc" placeholder="Describe the event…"></textarea>
       </div>
     </div>
@@ -836,6 +842,10 @@
       <div class="fg">
         <div class="fl">Label</div>
         <input id="edit-label" class="fi" type="text" />
+      </div>
+      <div class="fg">
+        <div class="fl">Description <span class="opt">(shown on calendar)</span></div>
+        <input id="edit-desc" class="fi" type="text" />
       </div>
       <div class="fg">
         <div class="fl">Detail</div>
@@ -977,6 +987,7 @@ let rangeStart  = null, rangeEnd = null;
 let nameFromEdit = false;
 let qcDate = null, selWD = null, selCat = null, selLvCat = null;
 let editType = null, editDate = null, editId = null;
+let customCategories = []; // persisted custom category names
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -1014,7 +1025,10 @@ function init() {
 
   const now = new Date();
   cy = now.getFullYear(); cm = now.getMonth();
+  /* Load custom categories */
+  try { customCategories = JSON.parse(localStorage.getItem('customCats') || '[]'); } catch(_) {}
   buildWD();
+  renderCustomCats();
   render();
 }
 
@@ -1165,7 +1179,12 @@ function render() {
       cell.appendChild(chips);
     }
 
-    if (!other) cell.addEventListener('click', () => onCellClick(ds));
+    if (!other) cell.addEventListener('click', (e) => {
+      /* Ignore click if user is selecting text (drag-select on chips) */
+      const sel = window.getSelection();
+      if (sel && sel.toString().length > 0) { sel.removeAllRanges(); return; }
+      onCellClick(ds);
+    });
     body.appendChild(cell);
   }
   updateStats();
@@ -1325,12 +1344,49 @@ function toggleTime(btn, type) {
 }
 function pickCat(btn, cat) {
   document.querySelectorAll('#ov-qc .cat-b').forEach(b => b.className = 'cat-b');
-  btn.className = `cat-b a-${cat}`; selCat = cat;
+  btn.className = `cat-b a-${cat}`;
+  selCat = cat;
   document.getElementById('cr-custom').classList.toggle('on', cat === 'custom');
+}
+
+/* ── Custom Categories ─────────────────────────────────── */
+function renderCustomCats() {
+  const row = document.getElementById('qc-cat-row');
+  if (!row) return;
+  // remove old custom buttons
+  row.querySelectorAll('.cat-b-custom').forEach(el => el.remove());
+  // insert before the "+ Custom" button
+  const addBtn = row.querySelector('[onclick*="\'custom\'"]');
+  customCategories.forEach(name => {
+    const btn = document.createElement('button');
+    btn.className = 'cat-b cat-b-custom';
+    btn.innerHTML = `${name}<span class="cat-del" onclick="event.stopPropagation();deleteCustomCat('${name.replace(/'/g,"\\'")}')">×</span>`;
+    btn.addEventListener('click', () => pickCat(btn, 'custom_' + name));
+    row.insertBefore(btn, addBtn);
+  });
+  // also update sidebar legend
+  renderCustomLegend();
+}
+
+function deleteCustomCat(name) {
+  customCategories = customCategories.filter(c => c !== name);
+  localStorage.setItem('customCats', JSON.stringify(customCategories));
+  renderCustomCats();
+  toast(`🗑️ Category "${name}" removed`);
+}
+
+function renderCustomLegend() {
+  const leg = document.getElementById('leg-qc');
+  leg.querySelectorAll('.legend-custom').forEach(el => el.remove());
+  customCategories.forEach(name => {
+    const item = document.createElement('div');
+    item.className = 'legend-item legend-custom';
+    item.innerHTML = `<div class="legend-dot" style="background:#be185d"></div>${name}`;
+    leg.appendChild(item);
+  });
 }
 function saveQC() {
   const desc = document.getElementById('qc-desc').value.trim();
-  if (!desc) { toast('⚠️ Add an event description.'); return; }
 
   const catMap = { tcv:'TCV', bookings:'Bookings', funder:'Funder Report' };
   const catLabel = selCat ? (catMap[selCat] || (document.getElementById('custom-val').value.trim() || 'Custom')) : '';
@@ -1342,7 +1398,10 @@ function saveQC() {
   const parts = [];
   if (selWD) parts.push(`WD${selWD}`);
   if (catLabel) parts.push(catLabel);
-  const label = parts.length > 0 ? parts.join(' · ') : desc.slice(0, 30);
+  const label = parts.length > 0 ? parts.join(' · ') : (desc ? desc.slice(0, 30) : fmt(qcDate));
+
+  /* Must have at least something */
+  if (!selWD && !selCat && !desc) { toast('⚠️ Please fill in at least one field.'); return; }
 
   /* Build detail from available parts */
   const detailParts = [];
@@ -1350,6 +1409,16 @@ function saveQC() {
   if (catLabel) detailParts.push(catLabel);
   detailParts.push(tStr);
   const detail = detailParts.join('  |  ') + '\n' + desc;
+
+  /* Save new custom category if needed */
+  if (selCat === 'custom') {
+    const customName = document.getElementById('custom-val').value.trim();
+    if (customName && !customCategories.includes(customName)) {
+      customCategories.push(customName);
+      localStorage.setItem('customCats', JSON.stringify(customCategories));
+      renderCustomCats();
+    }
+  }
 
   writeEvent('qc', qcDate, {
     catClass,
@@ -1369,6 +1438,7 @@ function openEditModal(type, dateStr, id) {
   if (!ev) { toast('⚠️ Event not found'); return; }
   document.getElementById('edit-cat').value = ev.catClass || 'custom';
   document.getElementById('edit-label').value = ev.label || '';
+  document.getElementById('edit-desc').value = ev.desc || '';
   document.getElementById('edit-detail').value = ev.detail || '';
   document.getElementById('edit-sub').textContent = `${dateStr}`;
   document.getElementById('ov-edit').classList.add('open');
@@ -1378,9 +1448,10 @@ function saveEdit() {
   if (!editType || !editDate || !editId) return;
   const cat = document.getElementById('edit-cat').value;
   const label = document.getElementById('edit-label').value.trim();
+  const desc = document.getElementById('edit-desc').value.trim();
   const detail = document.getElementById('edit-detail').value.trim();
   if (!label) { toast('⚠️ Label required'); return; }
-  const ev = { catClass: cat, label, detail };
+  const ev = { catClass: cat, label, desc, detail };
   // write/update via same channel as writeEvent
   if (fbEnabled && db) {
     db.ref(`rooms/${roomId}/${editType}/${editDate}/${editId}`).set({ ...ev, _del: false });
