@@ -122,4 +122,39 @@ io.on('connection', socket => {
 process.on('SIGTERM', () => { if (saveTimer) clearTimeout(saveTimer); scheduleSave(); setTimeout(() => process.exit(0), 3000); });
 process.on('SIGINT', () => { if (saveTimer) clearTimeout(saveTimer); scheduleSave(); setTimeout(() => process.exit(0), 3000); });
 
-server.listen(PORT, () => console.log(`Socket.IO server listening on http://localhost:${PORT}`));
+server.listen(PORT, () => {
+  console.log(`Socket.IO server listening on http://localhost:${PORT}`);
+  console.log(`Data directory: ${DATA_DIR}`);
+  console.log(`Data file: ${DATA_FILE}`);
+  console.log(`File exists: ${fs.existsSync(DATA_FILE)}`);
+});
+
+/* ── Diagnostic endpoint: GET /api/status ────────────────── */
+app.get('/api/status', (req, res) => {
+  const fileExists = fs.existsSync(DATA_FILE);
+  let fileSize = 0, fileMtime = null;
+  if (fileExists) {
+    const stat = fs.statSync(DATA_FILE);
+    fileSize = stat.size;
+    fileMtime = stat.mtime.toISOString();
+  }
+  const roomKeys = Object.keys(rooms);
+  const eventCounts = {};
+  roomKeys.forEach(rid => {
+    const r = rooms[rid];
+    let qcCount = 0, lvCount = 0;
+    Object.values(r.qc || {}).forEach(d => qcCount += Object.keys(d).length);
+    Object.values(r.lv || {}).forEach(d => lvCount += Object.keys(d).length);
+    eventCounts[rid] = { qc: qcCount, lv: lvCount };
+  });
+  res.json({
+    ok: true,
+    dataDir: DATA_DIR,
+    dataFile: DATA_FILE,
+    fileExists,
+    fileSize,
+    fileLastModified: fileMtime,
+    roomCount: roomKeys.length,
+    rooms: eventCounts
+  });
+});
