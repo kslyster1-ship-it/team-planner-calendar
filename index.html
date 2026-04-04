@@ -180,7 +180,7 @@
     .uc-edit svg{width:11px;height:11px}
     .legend-list{display:flex;flex-direction:column;gap:5px}
     .legend-item{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:500;color:var(--gray-600)}
-    .legend-icon{flex-shrink:0;font-size:13px;width:18px;text-align:center}
+    .legend-icon{flex-shrink:0;width:7px;height:7px;border-radius:50%}
     .stat-cards{display:grid;grid-template-columns:1fr 1fr;gap:7px}
     .stat-card{background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--r-md);padding:9px 11px}
     .stat-card.full{grid-column:1/-1}
@@ -594,9 +594,9 @@
       <div class="sb-title">Legend</div>
       <div class="legend-list" id="leg-qc"></div>
       <div class="legend-list" id="leg-lv" style="display:none">
-        <div class="legend-item"><span class="legend-icon">🏖️</span>Leave</div>
-        <div class="legend-item"><span class="legend-icon">🏠</span>Home Office</div>
-        <div class="legend-item"><span class="legend-icon">💼</span>On Duty</div>
+        <div class="legend-item"><span class="legend-icon" style="background:#dc2626"></span>Leave</div>
+        <div class="legend-item"><span class="legend-icon" style="background:#16a34a"></span>Home Office</div>
+        <div class="legend-item"><span class="legend-icon" style="background:#0369a1"></span>On Duty</div>
       </div>
     </div>
 
@@ -1395,12 +1395,14 @@ function deleteCat(key) {
 }
 
 function renderLegend() {
+  const colorMap = { tcv:'#6d28d9', bookings:'#1d4ed8', funder:'#b45309', custom:'#be185d' };
   const leg = document.getElementById('leg-qc');
   leg.innerHTML = '';
   allCategories.forEach(cat => {
     const item = document.createElement('div');
     item.className = 'legend-item';
-    item.innerHTML = `<span class="legend-icon">${cat.icon || '🏷️'}</span>${cat.label}`;
+    const color = colorMap[cat.colorClass] || '#be185d';
+    item.innerHTML = `<span class="legend-icon" style="background:${color}"></span>${cat.label}`;
     leg.appendChild(item);
   });
 }
