@@ -254,6 +254,10 @@
       font-size:10px;font-weight:600;line-height:1.4;
       flex-shrink:0;
     }
+    .chip .chip-top{cursor:grab}
+    .chip.dragging{opacity:.4}
+    .chip.drop-before{box-shadow:0 -2px 0 var(--indigo-500)}
+    .chip.drop-after{box-shadow:0 2px 0 var(--indigo-500)}
     .chip-top{display:flex;align-items:center;gap:3px}
     .chip-icon{flex-shrink:0;font-size:9px}
     .chip-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1135,8 +1139,7 @@ function render() {
     dn.className = 'dn';
     dn.textContent = d;
 
-    const evEntries = Object.entries(store[ds] || {});
-    const evArr = evEntries.map(([id, ev]) => ({ id, ev }));
+    const evArr = sortedEvents(store[ds]);
 
     /* Hover popup on day number */
     if (!other && evArr.length > 0) {
@@ -1159,6 +1162,7 @@ function render() {
         c.innerHTML = `<div class="chip-top"><span class="chip-icon">${iconOf(ev.catClass)}</span><span class="chip-text">${ev.label}</span></div>${descText ? `<div class="chip-desc">${descText}</div>` : ''}`;
         c.title = ev.detail || '';
         c.addEventListener('click', e => { e.stopPropagation(); openEditModal(mode==='quarterly'?'qc':'lv', ds, id); });
+        bindChipDrag(c, ds, id);
         chips.appendChild(c);
       });
       cell.appendChild(chips);
@@ -1173,6 +1177,90 @@ function render() {
     body.appendChild(cell);
   }
   updateStats();
+}
+
+/* ── EVENT ORDER ───────────────────────────────────────── */
+/* Default order: TCV → Bookings → DaaS Bookings → Funder → others.
+   A manual drag stores an explicit `order`, which takes precedence. */
+function defaultRank(ev) {
+  const cls = ev.catClass;
+  if (cls === 'tcv') return 0;
+  if (cls === 'bookings') return /daas/i.test(`${ev.desc || ''} ${ev.label || ''}`) ? 2 : 1;
+  if (cls === 'funder') return 3;
+  return 4;
+}
+
+function sortedEvents(dayStore) {
+  return Object.entries(dayStore || {})
+    .map(([id, ev]) => ({ id, ev }))
+    .sort((a, b) => {
+      const ao = typeof a.ev.order === 'number', bo = typeof b.ev.order === 'number';
+      if (ao && bo) return a.ev.order - b.ev.order;
+      if (ao !== bo) return ao ? -1 : 1;  /* manually ordered items first */
+      return defaultRank(a.ev) - defaultRank(b.ev) || a.id.localeCompare(b.id);
+    });
+}
+
+/* Persist an existing event (update in place) via the active backend */
+function persistEvent(type, dateStr, id, ev) {
+  if (fbEnabled && db) {
+    db.ref(`rooms/${roomId}/${type}/${dateStr}/${id}`).set({ ...ev, _del: false });
+  } else if (socketConnected && socket) {
+    socket.emit('writeEvent', { room: roomId, type, dateStr, id, ev });
+  }
+  const store = type === 'qc' ? qcData : leaveData;
+  if (!store[dateStr]) store[dateStr] = {};
+  store[dateStr][id] = ev;
+}
+
+let dragSrc = null; /* { ds, id } */
+
+function bindChipDrag(c, ds, id) {
+  /* Only enable dragging when grabbing outside the description, so desc text stays selectable */
+  c.addEventListener('mousedown', e => {
+    c.draggable = !e.target.closest('.chip-desc');
+  });
+  c.addEventListener('dragstart', e => {
+    dragSrc = { ds, id };
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', id);
+    c.classList.add('dragging');
+  });
+  c.addEventListener('dragend', () => {
+    dragSrc = null;
+    c.classList.remove('dragging');
+    document.querySelectorAll('.chip.drop-before,.chip.drop-after')
+      .forEach(el => el.classList.remove('drop-before', 'drop-after'));
+  });
+  c.addEventListener('dragover', e => {
+    if (!dragSrc || dragSrc.ds !== ds || dragSrc.id === id) return;
+    e.preventDefault();
+    const r = c.getBoundingClientRect();
+    const after = e.clientY > r.top + r.height / 2;
+    c.classList.toggle('drop-after', after);
+    c.classList.toggle('drop-before', !after);
+  });
+  c.addEventListener('dragleave', () => c.classList.remove('drop-before', 'drop-after'));
+  c.addEventListener('drop', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    const after = c.classList.contains('drop-after');
+    c.classList.remove('drop-before', 'drop-after');
+    if (!dragSrc || dragSrc.ds !== ds || dragSrc.id === id) return;
+    reorderEvent(ds, dragSrc.id, id, after);
+  });
+}
+
+function reorderEvent(ds, srcId, targetId, after) {
+  const type = mode === 'quarterly' ? 'qc' : 'lv';
+  const store = type === 'qc' ? qcData : leaveData;
+  const ids = sortedEvents(store[ds]).map(x => x.id).filter(x => x !== srcId);
+  ids.splice(ids.indexOf(targetId) + (after ? 1 : 0), 0, srcId);
+  ids.forEach((eid, i) => {
+    const ev = store[ds][eid];
+    if (ev && ev.order !== i) persistEvent(type, ds, eid, { ...ev, order: i });
+  });
+  render();
 }
 
 function inRange(ds) {
@@ -1503,18 +1591,11 @@ function saveEdit() {
   const desc = document.getElementById('edit-desc').value.trim();
   const detail = document.getElementById('edit-detail').value.trim();
   if (!label) { toast('⚠️ Label required'); return; }
+  const prev = ((editType === 'qc' ? qcData : leaveData)[editDate] || {})[editId] || {};
   const ev = { catClass: cat, label, desc, detail };
-  // write/update via same channel as writeEvent
-  if (fbEnabled && db) {
-    db.ref(`rooms/${roomId}/${editType}/${editDate}/${editId}`).set({ ...ev, _del: false });
-  } else if (socketConnected && socket) {
-    socket.emit('writeEvent', { room: roomId, type: editType, dateStr: editDate, id: editId, ev });
-  } else {
-    const store = editType === 'qc' ? qcData : leaveData;
-    if (!store[editDate]) store[editDate] = {};
-    store[editDate][editId] = ev;
-    render();
-  }
+  if (typeof prev.order === 'number') ev.order = prev.order;
+  persistEvent(editType, editDate, editId, ev);
+  render();
   closeModal('edit');
   toast('✅ Event updated');
 }
